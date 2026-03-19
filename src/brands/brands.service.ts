@@ -6,7 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Repository, Like } from 'typeorm';
-import { Brand } from '../entities/brand.entity';
+import { Brand } from './entities/brand.entity';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
 import { QueryBrandDto } from './dto/query-brand.dto';
@@ -74,7 +74,7 @@ export class BrandsService {
         const brandsWithCount = await Promise.all(
             brands.map(async (brand) => {
                 const products = await this.productsService.findAll({
-                    brandId: brand.slug,
+                    brandId: brand.id,
                     page: 1,
                     take: 1,
                 });
@@ -99,7 +99,7 @@ export class BrandsService {
 
         // 실제 제품 수 계산
         const products = await this.productsService.findAll({
-            brandId: brand.slug,
+            brandId: brand.id,
             page: 1,
             take: 1,
         });

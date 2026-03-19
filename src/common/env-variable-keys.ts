@@ -13,5 +13,10 @@ export const envVariableKeys = {
 
   // CORS
   corsOrigin: 'CORS_ORIGIN',
+
+  // JWT
+  jwtSecret: 'JWT_SECRET',
+  jwtAccessExpires: 'JWT_ACCESS_EXPIRES',
+  jwtRefreshExpires: 'JWT_REFRESH_EXPIRES',
 } as const;
 

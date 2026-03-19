@@ -1,9 +1,14 @@
-import { Product, ProductTag } from '../../entities/product.entity';
+import { Product, ProductTag } from '../entities/product.entity';
+import { ProductImage } from '../entities/product-image.entity';
+import { ProductOption } from '../entities/product-option.entity';
+import { ProductCompatibility } from '../entities/product-compatibility.entity';
+import { ProductRecommendation } from '../entities/product-recommendation.entity';
 
 export class ProductResponseDto {
   id: string;
   name: string;
   description: string;
+  htmlDescription?: string;
   price: number;
   image: string;
   tag: ProductTag;
@@ -23,6 +28,7 @@ export class ProductResponseDto {
     this.id = product.id;
     this.name = product.name;
     this.description = product.description;
+    this.htmlDescription = product.htmlDescription;
     this.price = Number(product.price);
     this.image = product.image;
     this.tag = product.tag;
@@ -37,6 +43,65 @@ export class ProductResponseDto {
     this.isActive = product.isActive;
     this.createdAt = product.createdAt;
     this.updatedAt = product.updatedAt;
+  }
+}
+
+export class ProductDetailResponseDto extends ProductResponseDto {
+  images: {
+    id: string;
+    url: string;
+    alt?: string;
+    order: number;
+  }[];
+  options: {
+    id: string;
+    name: string;
+    price?: number;
+    stock: number;
+    order: number;
+  }[];
+  compatibilityProducts: {
+    id: string;
+    product: ProductResponseDto;
+    order: number;
+  }[];
+  recommendationProducts: {
+    id: string;
+    product: ProductResponseDto;
+    order: number;
+  }[];
+
+  constructor(
+    product: Product,
+    images: ProductImage[],
+    options: ProductOption[],
+    compatibilityProducts: ProductCompatibility[],
+    recommendationProducts: ProductRecommendation[],
+  ) {
+    super(product);
+    this.images = images.map((img) => ({
+      id: img.id,
+      url: img.url,
+      alt: img.alt,
+      order: img.order,
+    }));
+    this.options = options.map((opt) => ({
+      id: opt.id,
+      name: opt.name,
+      price: opt.price ? Number(opt.price) : undefined,
+      stock: opt.stock,
+      order: opt.order,
+    }));
+    this.compatibilityProducts = compatibilityProducts.map((cp) => ({
+      id: cp.id,
+      product: new ProductResponseDto(cp.compatibleProduct),
+      order: cp.order,
+    }));
+    this.recommendationProducts = recommendationProducts.map((rp) => ({
+      id: rp.id,
+      product: new ProductResponseDto(rp.recommendedProduct),
+      order: rp.order,
+    }));
   }
 }
 

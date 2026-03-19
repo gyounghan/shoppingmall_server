@@ -1,0 +1,942 @@
+openapi: 3.0.3
+info:
+  title: 명장쇼핑몰 API
+  description: 클라이언트 개발용 REST API 명세
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:3300
+    description: 로컬 개발
+
+tags:
+  - name: Auth
+    description: 인증
+  - name: Categories
+    description: 카테고리
+  - name: Brands
+    description: 브랜드
+  - name: Products
+    description: 상품
+  - name: Cart
+    description: 장바구니 (인증 필요)
+  - name: Wishlist
+    description: 위시리스트 (인증 필요)
+  - name: Simulator
+    description: 시뮬레이터 세트
+  - name: Consulting
+    description: 컨설팅 (인증 필요)
+  - name: Usability
+    description: 사용성 서비스 (인증 필요)
+  - name: Orders
+    description: 주문 (인증 필요)
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        name: { type: string }
+        phone: { type: string }
+        role: { type: string, enum: [USER, ADMIN] }
+        fishingPoints: { type: integer }
+
+    ProductTag:
+      type: string
+      enum: [BEST, NEW, SALE]
+
+    Product:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        htmlDescription: { type: string }
+        price: { type: number }
+        image: { type: string }
+        tag: { $ref: '#/components/schemas/ProductTag' }
+        brandId: { type: string }
+        categoryId: { type: string }
+        stock: { type: integer }
+        discountRate: { type: number }
+        rating: { type: number }
+        reviewCount: { type: integer }
+        viewCount: { type: integer }
+        salesCount: { type: integer }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: 회원가입
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 6 }
+                name: { type: string }
+                phone: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  expiresIn: { type: integer }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: 로그인
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  expiresIn: { type: integer }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: 토큰 갱신
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  expiresIn: { type: integer }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: 내 정보 조회
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+    patch:
+      tags: [Auth]
+      summary: 내 정보 수정
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 100 }
+                phone: { type: string, maxLength: 20 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: 로그아웃
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: No Content
+
+  /categories:
+    get:
+      tags: [Categories]
+      summary: 카테고리 목록
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: isActive
+          in: query
+          schema: { type: boolean }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: take
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [Categories]
+      summary: 카테고리 생성
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100 }
+                description: { type: string }
+                isActive: { type: boolean }
+      responses:
+        '201':
+          description: Created
+
+  /categories/{id}:
+    get:
+      tags: [Categories]
+      summary: 카테고리 단건 조회
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+    patch:
+      tags: [Categories]
+      summary: 카테고리 수정
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                isActive: { type: boolean }
+      responses:
+        '200':
+          description: OK
+    delete:
+      tags: [Categories]
+      summary: 카테고리 삭제
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: No Content
+
+  /brands:
+    get:
+      tags: [Brands]
+      summary: 브랜드 목록
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: isActive
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [Brands]
+      summary: 브랜드 생성
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, name]
+              properties:
+                slug: { type: string, pattern: '^[a-z0-9-]+$' }
+                name: { type: string }
+                description: { type: string }
+                logo: { type: string }
+                backgroundColor: { type: string }
+                gradientColor: { type: string }
+                hasLogo: { type: boolean }
+                hasOverlay: { type: boolean }
+      responses:
+        '201':
+          description: Created
+
+  /brands/{idOrSlug}:
+    get:
+      tags: [Brands]
+      summary: 브랜드 단건 조회
+      parameters:
+        - name: idOrSlug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+    patch:
+      tags: [Brands]
+      summary: 브랜드 수정
+      parameters:
+        - name: idOrSlug
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                slug: { type: string }
+                name: { type: string }
+                description: { type: string }
+                logo: { type: string }
+                backgroundColor: { type: string }
+                gradientColor: { type: string }
+                hasLogo: { type: boolean }
+                hasOverlay: { type: boolean }
+      responses:
+        '200':
+          description: OK
+    delete:
+      tags: [Brands]
+      summary: 브랜드 삭제
+      parameters:
+        - name: idOrSlug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204':
+          description: No Content
+
+  /products:
+    get:
+      tags: [Products]
+      summary: 상품 목록 (페이지·정렬·필터 지원)
+      description: 페이지(page) 기반 페이지네이션, sortBy/sortOrder로 정렬
+      parameters:
+        - name: brandId
+          in: query
+          schema: { type: string }
+        - name: categoryId
+          in: query
+          schema: { type: string }
+        - name: tag
+          in: query
+          schema: { $ref: '#/components/schemas/ProductTag' }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: minPrice
+          in: query
+          schema: { type: number }
+        - name: maxPrice
+          in: query
+          schema: { type: number }
+        - name: minRating
+          in: query
+          schema: { type: number }
+        - name: sortBy
+          in: query
+          schema: { type: string, enum: [price, createdAt, rating, salesCount, viewCount] }
+        - name: sortOrder
+          in: query
+          schema: { type: string, enum: [ASC, DESC] }
+        - name: isActive
+          in: query
+          schema: { type: boolean }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: take
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [Products]
+      summary: 상품 생성
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, price, brandId, categoryId]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                htmlDescription: { type: string }
+                price: { type: number, minimum: 0 }
+                image: { type: string, format: uri }
+                tag: { $ref: '#/components/schemas/ProductTag' }
+                brandId: { type: string }
+                categoryId: { type: string }
+                stock: { type: integer, minimum: 0 }
+                discountRate: { type: number, minimum: 0, maximum: 100 }
+                rating: { type: number, minimum: 0, maximum: 5 }
+                isActive: { type: boolean }
+      responses:
+        '201':
+          description: Created
+
+  /products/top:
+    get:
+      tags: [Products]
+      summary: 인기 상품
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: sortBy
+          in: query
+          schema: { type: string, enum: [price, createdAt, rating, salesCount, viewCount] }
+      responses:
+        '200':
+          description: OK
+
+  /products/brand/{brandId}:
+    get:
+      tags: [Products]
+      summary: 브랜드별 상품
+      description: page, take, sortBy, sortOrder 등 상품 목록과 동일 쿼리 지원
+      parameters:
+        - name: brandId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: take
+          in: query
+          schema: { type: integer }
+        - name: sortBy
+          in: query
+          schema: { type: string, enum: [price, createdAt, rating, salesCount, viewCount] }
+        - name: sortOrder
+          in: query
+          schema: { type: string, enum: [ASC, DESC] }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: minPrice
+          in: query
+          schema: { type: number }
+        - name: maxPrice
+          in: query
+          schema: { type: number }
+      responses:
+        '200':
+          description: OK
+
+  /products/category/{categoryId}:
+    get:
+      tags: [Products]
+      summary: 카테고리별 상품
+      description: page, take, sortBy, sortOrder 등 상품 목록과 동일 쿼리 지원
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: take
+          in: query
+          schema: { type: integer }
+        - name: sortBy
+          in: query
+          schema: { type: string, enum: [price, createdAt, rating, salesCount, viewCount] }
+        - name: sortOrder
+          in: query
+          schema: { type: string, enum: [ASC, DESC] }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: minPrice
+          in: query
+          schema: { type: number }
+        - name: maxPrice
+          in: query
+          schema: { type: number }
+      responses:
+        '200':
+          description: OK
+
+  /products/{id}:
+    get:
+      tags: [Products]
+      summary: 상품 상세
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+    patch:
+      tags: [Products]
+      summary: 상품 수정
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                htmlDescription: { type: string }
+                price: { type: number }
+                image: { type: string }
+                tag: { $ref: '#/components/schemas/ProductTag' }
+                brandId: { type: string }
+                categoryId: { type: string }
+                stock: { type: integer }
+                discountRate: { type: number }
+                rating: { type: number }
+                isActive: { type: boolean }
+      responses:
+        '200':
+          description: OK
+    delete:
+      tags: [Products]
+      summary: 상품 삭제
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: No Content
+
+  /cart:
+    get:
+      tags: [Cart]
+      summary: 장바구니 조회
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [Cart]
+      summary: 장바구니 추가
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId, quantity]
+              properties:
+                productId: { type: string, format: uuid }
+                optionId: { type: string, format: uuid }
+                quantity: { type: integer, minimum: 1 }
+      responses:
+        '201':
+          description: Created
+    delete:
+      tags: [Cart]
+      summary: 장바구니 비우기
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: No Content
+
+  /cart/{itemId}:
+    patch:
+      tags: [Cart]
+      summary: 장바구니 수량 수정
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: OK
+    delete:
+      tags: [Cart]
+      summary: 장바구니 항목 삭제
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: No Content
+
+  /wishlist:
+    get:
+      tags: [Wishlist]
+      summary: 위시리스트 조회
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [Wishlist]
+      summary: 위시리스트 추가
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId]
+              properties:
+                productId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Created
+
+  /wishlist/{itemId}:
+    delete:
+      tags: [Wishlist]
+      summary: 위시리스트 항목 삭제
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: No Content
+
+  /wishlist/product/{productId}:
+    delete:
+      tags: [Wishlist]
+      summary: 위시리스트 상품별 삭제
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: No Content
+
+  /simulator/sets:
+    get:
+      tags: [Simulator]
+      summary: 시뮬레이터 세트 목록
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: isActive
+          in: query
+          schema: { type: boolean }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: take
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [Simulator]
+      summary: 시뮬레이터 세트 생성
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, items]
+              properties:
+                name: { type: string, maxLength: 100 }
+                description: { type: string }
+                isActive: { type: boolean }
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [productId, categoryId]
+                    properties:
+                      productId: { type: string }
+                      categoryId: { type: string }
+      responses:
+        '201':
+          description: Created
+
+  /simulator/sets/{id}:
+    get:
+      tags: [Simulator]
+      summary: 시뮬레이터 세트 단건 조회
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+    patch:
+      tags: [Simulator]
+      summary: 시뮬레이터 세트 수정
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                isActive: { type: boolean }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [productId, categoryId]
+                    properties:
+                      productId: { type: string }
+                      categoryId: { type: string }
+      responses:
+        '200':
+          description: OK
+    delete:
+      tags: [Simulator]
+      summary: 시뮬레이터 세트 삭제
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204':
+          description: No Content
+
+  /consulting:
+    post:
+      tags: [Consulting]
+      summary: 컨설팅 신청
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, content]
+              properties:
+                title: { type: string, maxLength: 150 }
+                content: { type: string }
+      responses:
+        '201':
+          description: Created
+
+  /consulting/me:
+    get:
+      tags: [Consulting]
+      summary: 내 컨설팅 목록
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+
+  /usability-services:
+    post:
+      tags: [Usability]
+      summary: 사용성 서비스 신청
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, content]
+              properties:
+                title: { type: string, maxLength: 150 }
+                content: { type: string }
+      responses:
+        '201':
+          description: Created
+
+  /usability-services/me:
+    get:
+      tags: [Usability]
+      summary: 내 사용성 서비스 목록
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+
+  /orders:
+    post:
+      tags: [Orders]
+      summary: 회원 주문 생성
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items, paymentMethod]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [productId, quantity]
+                    properties:
+                      productId: { type: string }
+                      optionId: { type: string }
+                      quantity: { type: integer, minimum: 1 }
+                paymentMethod: { type: string }
+                note: { type: string, maxLength: 255 }
+      responses:
+        '201':
+          description: Created
+
+  /orders/guest:
+    post:
+      tags: [Orders]
+      summary: 비회원 주문 생성
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [guestName, guestEmail, items, paymentMethod]
+              properties:
+                guestName: { type: string, maxLength: 100 }
+                guestEmail: { type: string, maxLength: 255 }
+                guestPhone: { type: string, maxLength: 20 }
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [productId, quantity]
+                    properties:
+                      productId: { type: string }
+                      optionId: { type: string }
+                      quantity: { type: integer, minimum: 1 }
+                paymentMethod: { type: string }
+                note: { type: string, maxLength: 255 }
+      responses:
+        '201':
+          description: Created
+
+  /orders/guest/{orderId}:
+    get:
+      tags: [Orders]
+      summary: 비회원 주문 조회
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: email
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+
+  /orders/me:
+    get:
+      tags: [Orders]
+      summary: 내 주문 목록
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+
+  /health:
+    get:
+      tags: []
+      summary: 헬스체크
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  message: { type: string }

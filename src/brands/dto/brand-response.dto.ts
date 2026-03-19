@@ -1,4 +1,4 @@
-import { Brand } from '../../entities/brand.entity';
+import { Brand } from '../entities/brand.entity';
 
 export class BrandResponseDto {
   id: string;

@@ -8,7 +8,7 @@ import {
   Max,
   IsUrl,
 } from 'class-validator';
-import { ProductTag } from '../../entities/product.entity';
+import { ProductTag } from '../entities/product.entity';
 
 export class CreateProductDto {
   @IsString()
@@ -17,6 +17,10 @@ export class CreateProductDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @IsString()
+  @IsOptional()
+  htmlDescription?: string;
 
   @IsNumber()
   @Min(0)

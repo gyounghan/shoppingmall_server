@@ -1,5 +1,5 @@
 import { DataSource } from 'typeorm';
-import { Brand } from '../entities/brand.entity';
+import { Brand } from './entities/brand.entity';
 
 export const brandsSeedData = [
     {
@@ -42,6 +42,50 @@ export const brandsSeedData = [
         logo: 'CAMEL',
         backgroundColor: null,
         gradientColor: 'from-purple-600 to-purple-800',
+        hasLogo: false,
+        hasOverlay: true,
+        isActive: true,
+    },
+    {
+        slug: 'motor-guide',
+        name: 'MOTORGUIDE',
+        description: 'Garmin 산하 트롤링모터 브랜드',
+        logo: 'MOTORGUIDE',
+        backgroundColor: null,
+        gradientColor: 'from-blue-500 to-blue-700',
+        hasLogo: false,
+        hasOverlay: true,
+        isActive: true,
+    },
+    {
+        slug: 'icom',
+        name: 'ICOM',
+        description: '해양 무선통신·AIS 전문 제조사',
+        logo: 'ICOM',
+        backgroundColor: null,
+        gradientColor: 'from-indigo-600 to-indigo-800',
+        hasLogo: false,
+        hasOverlay: true,
+        isActive: true,
+    },
+    {
+        slug: 'em-trak',
+        name: 'EM-TRAK',
+        description: 'AIS·EPIRB 제조사',
+        logo: 'EM-TRAK',
+        backgroundColor: null,
+        gradientColor: 'from-sky-600 to-sky-800',
+        hasLogo: false,
+        hasOverlay: true,
+        isActive: true,
+    },
+    {
+        slug: 'golight',
+        name: 'GOLIGHT',
+        description: '해상용 써치라이트',
+        logo: 'GOLIGHT',
+        backgroundColor: null,
+        gradientColor: 'from-amber-600 to-amber-800',
         hasLogo: false,
         hasOverlay: true,
         isActive: true,

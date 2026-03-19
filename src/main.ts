@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
 import { AppModule } from './app.module';
 import { envVariableKeys } from './common/env-variable-keys';
@@ -24,6 +25,14 @@ async function bootstrap() {
         origin: allowedOrigins,
         credentials: true,
     });
+
+    app.useGlobalPipes(
+        new ValidationPipe({
+            whitelist: true,
+            transform: true,
+            forbidNonWhitelisted: true,
+        }),
+    );
 
     const port = configService.get<number>(envVariableKeys.port) || 3000;
     await app.listen(port, '0.0.0.0'); // 0.0.0.0으로 리스닝하여 외부 접속 허용

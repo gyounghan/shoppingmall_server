@@ -18,6 +18,7 @@ import { QueryProductDto, SortField } from './dto/query-product.dto';
 import {
   ProductResponseDto,
   PaginatedProductResponseDto,
+  ProductDetailResponseDto,
 } from './dto/product-response.dto';
 
 @Controller('products')
@@ -64,10 +65,21 @@ export class ProductsController {
     return this.productsService.getProductsByCategory(categoryId, queryDto);
   }
 
+  @Get('main-category/:mainCategoryId')
+  async getProductsByMainCategory(
+    @Param('mainCategoryId', ParseUUIDPipe) mainCategoryId: string,
+    @Query() queryDto: QueryProductDto,
+  ): Promise<PaginatedProductResponseDto> {
+    return this.productsService.getProductsByMainCategory(
+      mainCategoryId,
+      queryDto,
+    );
+  }
+
   @Get(':id')
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<ProductResponseDto> {
+  ): Promise<ProductDetailResponseDto> {
     return this.productsService.findOne(id);
   }
 

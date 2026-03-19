@@ -6,9 +6,10 @@ import {
   Min,
   Max,
   IsNumber,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ProductTag } from '../../entities/product.entity';
+import { ProductTag } from '../entities/product.entity';
 
 export enum SortField {
   PRICE = 'price',
@@ -65,6 +66,11 @@ export class QueryProductDto {
   @IsOptional()
   @IsEnum(SortOrder)
   sortOrder?: SortOrder;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  isActive?: boolean;
 
   @IsOptional()
   @Type(() => Number)

@@ -24,6 +24,9 @@ export class Product {
   @Column({ type: 'text', nullable: true })
   description: string;
 
+  @Column({ type: 'longtext', nullable: true })
+  htmlDescription: string;
+
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   price: number;
 
@@ -72,4 +75,3 @@ export class Product {
   @UpdateDateColumn()
   updatedAt: Date;
 }
-
