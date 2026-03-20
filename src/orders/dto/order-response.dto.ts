@@ -10,11 +10,11 @@ export class OrderResponseDto {
   guestPhone?: string;
   totalAmount: number;
   status: OrderStatus;
-  note?: string;
+  note: string | null;
   items: {
     id: string;
     productId: string;
-    optionId?: string;
+    optionId: string | null;
     quantity: number;
     unitPrice: number;
   }[];

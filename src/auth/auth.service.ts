@@ -3,19 +3,18 @@ import {
   UnauthorizedException,
   ConflictException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { User } from './entities/user.entity';
-import { RefreshToken } from './entities/refresh-token.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { envVariableKeys } from '../common/env-variable-keys';
+import { UsersRepository } from './repositories/users.repository';
+import { RefreshTokensRepository } from './repositories/refresh-tokens.repository';
 
 const ACCESS_EXPIRES_DEFAULT = '15m';
 const REFRESH_EXPIRES_DEFAULT = '7d';
@@ -26,10 +25,8 @@ export class AuthService {
   private readonly refreshExpires: string;
 
   constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-    @InjectRepository(RefreshToken)
-    private readonly refreshTokenRepository: Repository<RefreshToken>,
+    private readonly usersRepository: UsersRepository,
+    private readonly refreshTokensRepository: RefreshTokensRepository,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {
@@ -56,36 +53,28 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
-    // 이메일 중복 확인
-    const existingUser = await this.userRepository.findOne({
-      where: { email: registerDto.email },
-    });
+    const existingUser = await this.usersRepository.findByEmail(registerDto.email);
 
     if (existingUser) {
       throw new ConflictException('이미 등록된 이메일입니다.');
     }
 
-    // 비밀번호 해시
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
 
-    // 사용자 생성
-    const user = this.userRepository.create({
+    const user = this.usersRepository.create({
       email: registerDto.email,
       password: hashedPassword,
       name: registerDto.name,
-      phone: registerDto.phone,
+      phone: registerDto.phone ?? null,
     });
 
-    const savedUser = await this.userRepository.save(user);
+    const savedUser = await this.usersRepository.save(user);
 
     return this.issueTokenPair(savedUser);
   }
 
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
-    // 사용자 찾기
-    const user = await this.userRepository.findOne({
-      where: { email: loginDto.email },
-    });
+    const user = await this.usersRepository.findByEmail(loginDto.email);
 
     if (!user) {
       throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
@@ -95,18 +84,14 @@ export class AuthService {
       throw new UnauthorizedException('비활성화된 계정입니다.');
     }
 
-    // 비밀번호 확인
-    const isPasswordValid = await bcrypt.compare(
-      loginDto.password,
-      user.password,
-    );
+    const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
     }
 
     user.lastLoginAt = new Date();
-    await this.userRepository.save(user);
+    await this.usersRepository.save(user);
 
     return this.issueTokenPair(user);
   }
@@ -123,24 +108,20 @@ export class AuthService {
       throw new UnauthorizedException('리프레시 토큰이 아닙니다.');
     }
 
-    const stored = await this.refreshTokenRepository.findOne({
-      where: { jti: payload.jti },
-    });
+    const stored = await this.refreshTokensRepository.findByJti(payload.jti);
 
     if (!stored || new Date() > stored.expiresAt) {
-      if (stored) await this.refreshTokenRepository.remove(stored);
+      if (stored) await this.refreshTokensRepository.remove(stored);
       throw new UnauthorizedException('리프레시 토큰이 만료되었거나 무효화되었습니다.');
     }
 
-    const user = await this.userRepository.findOne({
-      where: { id: payload.sub, isActive: true },
-    });
+    const user = await this.usersRepository.findActiveById(payload.sub);
     if (!user) {
-      await this.refreshTokenRepository.remove(stored);
+      await this.refreshTokensRepository.remove(stored);
       throw new UnauthorizedException('사용자를 찾을 수 없습니다.');
     }
 
-    await this.refreshTokenRepository.remove(stored);
+    await this.refreshTokensRepository.remove(stored);
     return this.issueTokenPair(user);
   }
 
@@ -149,16 +130,13 @@ export class AuthService {
       try {
         const payload = this.jwtService.verify(refreshToken);
         if (payload.jti) {
-          await this.refreshTokenRepository.delete({
-            jti: payload.jti,
-            userId,
-          });
+          await this.refreshTokensRepository.deleteByJtiAndUserId(payload.jti, userId);
         }
       } catch {
         //
       }
     } else {
-      await this.refreshTokenRepository.delete({ userId });
+      await this.refreshTokensRepository.deleteByUserId(userId);
     }
   }
 
@@ -179,36 +157,26 @@ export class AuthService {
       ),
     ]);
 
-    await this.refreshTokenRepository.save(
-      this.refreshTokenRepository.create({
-        userId: user.id,
-        jti,
-        expiresAt,
-      }),
-    );
+    const tokenEntity = this.refreshTokensRepository.create({
+      userId: user.id,
+      jti,
+      expiresAt,
+    });
+    await this.refreshTokensRepository.save(tokenEntity);
 
     const accessSeconds = this.parseExpiresToSeconds(this.accessExpires);
-    return new AuthResponseDto(
-      user,
-      accessToken,
-      refreshTokenJwt,
-      accessSeconds,
-    );
+    return new AuthResponseDto(user, accessToken, refreshTokenJwt, accessSeconds);
   }
 
   async validateUser(userId: string): Promise<User | null> {
-    const user = await this.userRepository.findOne({
-      where: { id: userId, isActive: true },
-    });
-
-    return user || null;
+    return this.usersRepository.findActiveById(userId);
   }
 
   async updateProfile(
     userId: string,
     updateProfileDto: UpdateProfileDto,
   ): Promise<AuthResponseDto['user']> {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const user = await this.usersRepository.findById(userId);
     if (!user) {
       throw new UnauthorizedException('유저를 찾을 수 없습니다.');
     }
@@ -220,8 +188,7 @@ export class AuthService {
       user.phone = updateProfileDto.phone;
     }
 
-    const savedUser = await this.userRepository.save(user);
+    const savedUser = await this.usersRepository.save(user);
     return new AuthResponseDto(savedUser, '', '', 0).user;
   }
 }
-

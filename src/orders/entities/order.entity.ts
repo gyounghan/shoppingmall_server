@@ -23,20 +23,20 @@ export class Order {
 
   @Index()
   @Column({ type: 'varchar', length: 50, nullable: true })
-  userId: string;
+  userId: string | null;
 
   @ManyToOne(() => User, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'userId' })
-  user: User;
+  user: User | null;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
-  guestName: string;
+  guestName: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  guestEmail: string;
+  guestEmail: string | null;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
-  guestPhone: string;
+  guestPhone: string | null;
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   totalAmount: number;
@@ -49,7 +49,7 @@ export class Order {
   status: OrderStatus;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  note: string;
+  note: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

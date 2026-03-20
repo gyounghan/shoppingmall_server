@@ -1,13 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { ProductsService } from './products.service';
+import { ProductsRepository } from './repositories/products.repository';
 import { Product } from './entities/product.entity';
-import { ProductImage } from './entities/product-image.entity';
-import { ProductOption } from './entities/product-option.entity';
-import { ProductCompatibility } from './entities/product-compatibility.entity';
-import { ProductRecommendation } from './entities/product-recommendation.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { SortField, SortOrder } from './dto/query-product.dto';
@@ -36,53 +31,39 @@ describe('ProductsService', () => {
     updatedAt: new Date(),
   };
 
-  const mockQueryBuilder = {
-    where: jest.fn().mockReturnThis(),
-    andWhere: jest.fn().mockReturnThis(),
-    orderBy: jest.fn().mockReturnThis(),
-    skip: jest.fn().mockReturnThis(),
-    take: jest.fn().mockReturnThis(),
-    getManyAndCount: jest.fn().mockResolvedValue([[mockProduct], 1]),
+  const mockRelatedData = {
+    images: [],
+    options: [],
+    compatibility: [],
+    recommendations: [],
   };
 
-  const mockProductRepo = {
+  const mockProductsRepository = {
     create: jest.fn(),
     save: jest.fn(),
-    findOne: jest.fn(),
-    find: jest.fn(),
-    createQueryBuilder: jest.fn(() => mockQueryBuilder),
-  };
-
-  const mockProductImageRepo = {
-    find: jest.fn().mockResolvedValue([]),
-  };
-
-  const mockProductOptionRepo = {
-    find: jest.fn().mockResolvedValue([]),
-  };
-
-  const mockCompatibilityRepo = {
-    find: jest.fn().mockResolvedValue([]),
-  };
-
-  const mockRecommendationRepo = {
-    find: jest.fn().mockResolvedValue([]),
+    findById: jest.fn(),
+    findAll: jest.fn().mockResolvedValue([[mockProduct], 1]),
+    findAllByCategoryIds: jest.fn().mockResolvedValue([[mockProduct], 1]),
+    findRelatedData: jest.fn().mockResolvedValue(mockRelatedData),
+    getTopProducts: jest.fn(),
+    findMainCategory: jest.fn(),
+    findChildCategoryIds: jest.fn().mockResolvedValue([]),
   };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ProductsService,
-        { provide: getRepositoryToken(Product), useValue: mockProductRepo },
-        { provide: getRepositoryToken(ProductImage), useValue: mockProductImageRepo },
-        { provide: getRepositoryToken(ProductOption), useValue: mockProductOptionRepo },
-        { provide: getRepositoryToken(ProductCompatibility), useValue: mockCompatibilityRepo },
-        { provide: getRepositoryToken(ProductRecommendation), useValue: mockRecommendationRepo },
+        { provide: ProductsRepository, useValue: mockProductsRepository },
       ],
     }).compile();
 
     service = module.get<ProductsService>(ProductsService);
     jest.clearAllMocks();
+    mockProductsRepository.findAll.mockResolvedValue([[mockProduct], 1]);
+    mockProductsRepository.findAllByCategoryIds.mockResolvedValue([[mockProduct], 1]);
+    mockProductsRepository.findRelatedData.mockResolvedValue(mockRelatedData);
+    mockProductsRepository.findChildCategoryIds.mockResolvedValue([]);
   });
 
   it('should be defined', () => {
@@ -97,12 +78,12 @@ describe('ProductsService', () => {
         brandId: 'brand-1',
         categoryId: 'cat-1',
       };
-      mockProductRepo.create.mockReturnValue({ ...mockProduct, ...dto });
-      mockProductRepo.save.mockResolvedValue(mockProduct);
+      mockProductsRepository.create.mockReturnValue({ ...mockProduct, ...dto });
+      mockProductsRepository.save.mockResolvedValue(mockProduct);
 
       const result = await service.create(dto);
 
-      expect(mockProductRepo.create).toHaveBeenCalledWith(
+      expect(mockProductsRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           name: dto.name,
           price: dto.price,
@@ -120,14 +101,13 @@ describe('ProductsService', () => {
     it('페이지네이션된 상품 목록을 반환한다', async () => {
       const result = await service.findAll({});
 
+      expect(mockProductsRepository.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({}),
+      );
       expect(result.data).toHaveLength(1);
       expect(result.total).toBe(1);
       expect(result.page).toBe(1);
       expect(result.take).toBe(20);
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
-        'product.isActive = :isActive',
-        { isActive: true },
-      );
     });
 
     it('필터 조건을 적용한다', async () => {
@@ -142,22 +122,21 @@ describe('ProductsService', () => {
         sortOrder: SortOrder.ASC,
       });
 
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'product.brandId = :brandId',
-        { brandId: 'brand-1' },
+      expect(mockProductsRepository.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({ brandId: 'brand-1', categoryId: 'cat-1' }),
       );
     });
   });
 
   describe('findOne', () => {
     it('상품 상세를 조회하고 viewCount를 증가시킨다', async () => {
-      mockProductRepo.findOne.mockResolvedValue(mockProduct);
-      mockProductRepo.save.mockResolvedValue({ ...mockProduct, viewCount: 1 });
+      mockProductsRepository.findById.mockResolvedValue(mockProduct);
+      mockProductsRepository.save.mockResolvedValue({ ...mockProduct, viewCount: 1 });
 
       const result = await service.findOne('prod-123');
 
-      expect(mockProductRepo.findOne).toHaveBeenCalledWith({ where: { id: 'prod-123' } });
-      expect(mockProductRepo.save).toHaveBeenCalled();
+      expect(mockProductsRepository.findById).toHaveBeenCalledWith('prod-123');
+      expect(mockProductsRepository.save).toHaveBeenCalled();
       expect(result.images).toEqual([]);
       expect(result.options).toEqual([]);
       expect(result.compatibilityProducts).toEqual([]);
@@ -165,7 +144,7 @@ describe('ProductsService', () => {
     });
 
     it('존재하지 않는 ID면 NotFoundException을 던진다', async () => {
-      mockProductRepo.findOne.mockResolvedValue(null);
+      mockProductsRepository.findById.mockResolvedValue(null);
 
       await expect(service.findOne('nonexistent')).rejects.toThrow(NotFoundException);
       await expect(service.findOne('nonexistent')).rejects.toThrow('제품을 찾을 수 없습니다');
@@ -175,17 +154,17 @@ describe('ProductsService', () => {
   describe('update', () => {
     it('상품을 수정한다', async () => {
       const dto: UpdateProductDto = { name: '수정된 상품명' };
-      mockProductRepo.findOne.mockResolvedValue(mockProduct);
-      mockProductRepo.save.mockResolvedValue({ ...mockProduct, ...dto });
+      mockProductsRepository.findById.mockResolvedValue(mockProduct);
+      mockProductsRepository.save.mockResolvedValue({ ...mockProduct, ...dto });
 
       const result = await service.update('prod-123', dto);
 
-      expect(mockProductRepo.save).toHaveBeenCalled();
+      expect(mockProductsRepository.save).toHaveBeenCalled();
       expect(result.name).toBe('수정된 상품명');
     });
 
     it('존재하지 않는 ID면 NotFoundException을 던진다', async () => {
-      mockProductRepo.findOne.mockResolvedValue(null);
+      mockProductsRepository.findById.mockResolvedValue(null);
 
       await expect(
         service.update('nonexistent', { name: '이름' }),
@@ -195,12 +174,12 @@ describe('ProductsService', () => {
 
   describe('remove', () => {
     it('상품을 비활성화한다 (soft delete)', async () => {
-      mockProductRepo.findOne.mockResolvedValue(mockProduct);
-      mockProductRepo.save.mockResolvedValue({ ...mockProduct, isActive: false });
+      mockProductsRepository.findById.mockResolvedValue(mockProduct);
+      mockProductsRepository.save.mockResolvedValue({ ...mockProduct, isActive: false });
 
       await service.remove('prod-123');
 
-      expect(mockProductRepo.save).toHaveBeenCalledWith(
+      expect(mockProductsRepository.save).toHaveBeenCalledWith(
         expect.objectContaining({ isActive: false }),
       );
     });
@@ -208,15 +187,11 @@ describe('ProductsService', () => {
 
   describe('getTopProducts', () => {
     it('인기 상품 목록을 반환한다', async () => {
-      mockProductRepo.find.mockResolvedValue([mockProduct]);
+      mockProductsRepository.getTopProducts.mockResolvedValue([mockProduct]);
 
       const result = await service.getTopProducts(5);
 
-      expect(mockProductRepo.find).toHaveBeenCalledWith({
-        where: { isActive: true },
-        order: { salesCount: 'DESC' },
-        take: 5,
-      });
+      expect(mockProductsRepository.getTopProducts).toHaveBeenCalledWith(5, SortField.SALES_COUNT);
       expect(result).toHaveLength(1);
     });
   });
@@ -225,9 +200,8 @@ describe('ProductsService', () => {
     it('brandId를 추가하여 findAll을 호출한다', async () => {
       const result = await service.getProductsByBrand('brand-1', {});
 
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'product.brandId = :brandId',
-        { brandId: 'brand-1' },
+      expect(mockProductsRepository.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({ brandId: 'brand-1' }),
       );
       expect(result.data).toHaveLength(1);
     });
@@ -237,11 +211,33 @@ describe('ProductsService', () => {
     it('categoryId를 추가하여 findAll을 호출한다', async () => {
       const result = await service.getProductsByCategory('cat-1', {});
 
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'product.categoryId = :categoryId',
-        { categoryId: 'cat-1' },
+      expect(mockProductsRepository.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({ categoryId: 'cat-1' }),
       );
       expect(result.data).toHaveLength(1);
+    });
+  });
+
+  describe('getProductsByMainCategory', () => {
+    it('메인 카테고리와 자식 카테고리 상품을 반환한다', async () => {
+      mockProductsRepository.findMainCategory.mockResolvedValue({ id: 'main-1', name: '메인' });
+      mockProductsRepository.findChildCategoryIds.mockResolvedValue(['child-1']);
+
+      const result = await service.getProductsByMainCategory('main-1', {});
+
+      expect(mockProductsRepository.findAllByCategoryIds).toHaveBeenCalledWith(
+        ['main-1', 'child-1'],
+        expect.any(Object),
+      );
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('메인 카테고리가 없으면 NotFoundException을 던진다', async () => {
+      mockProductsRepository.findMainCategory.mockResolvedValue(null);
+
+      await expect(
+        service.getProductsByMainCategory('nonexistent', {}),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

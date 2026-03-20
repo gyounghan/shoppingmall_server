@@ -22,23 +22,23 @@ export class Product {
   name: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description: string | null;
 
   @Column({ type: 'longtext', nullable: true })
-  htmlDescription: string;
+  htmlDescription: string | null;
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   price: number;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  image: string;
+  image: string | null;
 
   @Column({
     type: 'enum',
     enum: ProductTag,
     nullable: true,
   })
-  tag: ProductTag;
+  tag: ProductTag | null;
 
   @Index()
   @Column({ type: 'varchar', length: 50 })

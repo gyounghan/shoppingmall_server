@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { UsabilityServiceService } from './usability-service.service';
-import { UsabilityServiceRequest } from './entities/usability-service-request.entity';
+import { UsabilityServiceRepository } from './repositories/usability-service.repository';
 import { CreateUsabilityServiceRequestDto } from './dto/create-usability-service-request.dto';
 
 describe('UsabilityServiceService', () => {
@@ -17,10 +16,10 @@ describe('UsabilityServiceService', () => {
     updatedAt: new Date(),
   };
 
-  const mockRepository = {
+  const mockUsabilityServiceRepository = {
     create: jest.fn(),
     save: jest.fn(),
-    find: jest.fn(),
+    findByUser: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -28,8 +27,8 @@ describe('UsabilityServiceService', () => {
       providers: [
         UsabilityServiceService,
         {
-          provide: getRepositoryToken(UsabilityServiceRequest),
-          useValue: mockRepository,
+          provide: UsabilityServiceRepository,
+          useValue: mockUsabilityServiceRepository,
         },
       ],
     }).compile();
@@ -48,12 +47,12 @@ describe('UsabilityServiceService', () => {
         title: '사용성 서비스 제목',
         content: '내용',
       };
-      mockRepository.create.mockReturnValue(mockRequest);
-      mockRepository.save.mockResolvedValue(mockRequest);
+      mockUsabilityServiceRepository.create.mockReturnValue(mockRequest);
+      mockUsabilityServiceRepository.save.mockResolvedValue(mockRequest);
 
       const result = await service.create('user-123', dto);
 
-      expect(mockRepository.create).toHaveBeenCalledWith({
+      expect(mockUsabilityServiceRepository.create).toHaveBeenCalledWith({
         userId: 'user-123',
         title: dto.title,
         content: dto.content,
@@ -66,14 +65,11 @@ describe('UsabilityServiceService', () => {
 
   describe('findMine', () => {
     it('사용자의 사용성 서비스 목록을 반환한다', async () => {
-      mockRepository.find.mockResolvedValue([mockRequest]);
+      mockUsabilityServiceRepository.findByUser.mockResolvedValue([mockRequest]);
 
       const result = await service.findMine('user-123');
 
-      expect(mockRepository.find).toHaveBeenCalledWith({
-        where: { userId: 'user-123' },
-        order: { createdAt: 'DESC' },
-      });
+      expect(mockUsabilityServiceRepository.findByUser).toHaveBeenCalledWith('user-123');
       expect(result).toHaveLength(1);
       expect(result[0].userId).toBe('user-123');
     });

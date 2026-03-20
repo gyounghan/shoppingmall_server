@@ -27,7 +27,7 @@ export class SimulatorSet {
   name: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description: string | null;
 
   @Column({ type: 'boolean', default: true })
   isActive: boolean;

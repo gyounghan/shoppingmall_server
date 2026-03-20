@@ -1,8 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
+import { CategoriesRepository } from './repositories/categories.repository';
 import { Category } from './entities/category.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -10,28 +9,27 @@ import { QueryCategoryDto } from './dto/query-category.dto';
 
 describe('CategoriesService', () => {
   let service: CategoriesService;
-  let repository: Repository<Category>;
 
   const mockCategory: Category = {
     id: 'cat-123',
     name: '피시 finder',
     description: '물고기 탐지기',
+    parentId: null,
+    parent: null,
+    children: [],
     isActive: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 
-  const mockRepository = {
+  const mockCategoriesRepository = {
     create: jest.fn(),
     save: jest.fn(),
-    findOne: jest.fn(),
-    createQueryBuilder: jest.fn(() => ({
-      andWhere: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockReturnThis(),
-      skip: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(),
-      getManyAndCount: jest.fn().mockResolvedValue([[mockCategory], 1]),
-    })),
+    findById: jest.fn(),
+    findByIdActive: jest.fn(),
+    findMainCategories: jest.fn(),
+    findAll: jest.fn().mockResolvedValue([[mockCategory], 1]),
+    findChildCategoryIds: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -39,15 +37,15 @@ describe('CategoriesService', () => {
       providers: [
         CategoriesService,
         {
-          provide: getRepositoryToken(Category),
-          useValue: mockRepository,
+          provide: CategoriesRepository,
+          useValue: mockCategoriesRepository,
         },
       ],
     }).compile();
 
     service = module.get<CategoriesService>(CategoriesService);
-    repository = module.get<Repository<Category>>(getRepositoryToken(Category));
     jest.clearAllMocks();
+    mockCategoriesRepository.findAll.mockResolvedValue([[mockCategory], 1]);
   });
 
   it('should be defined', () => {
@@ -61,28 +59,28 @@ describe('CategoriesService', () => {
         description: '물고기 탐지기',
         isActive: true,
       };
-      mockRepository.create.mockReturnValue({ ...mockCategory, ...dto });
-      mockRepository.save.mockResolvedValue(mockCategory);
+      mockCategoriesRepository.create.mockReturnValue({ ...mockCategory, ...dto });
+      mockCategoriesRepository.save.mockResolvedValue(mockCategory);
 
       const result = await service.create(dto);
 
-      expect(mockRepository.create).toHaveBeenCalledWith({
+      expect(mockCategoriesRepository.create).toHaveBeenCalledWith({
         ...dto,
         isActive: true,
       });
-      expect(mockRepository.save).toHaveBeenCalled();
+      expect(mockCategoriesRepository.save).toHaveBeenCalled();
       expect(result.id).toBe(mockCategory.id);
       expect(result.name).toBe(mockCategory.name);
     });
 
     it('isActive 미지정 시 true로 생성한다', async () => {
       const dto: CreateCategoryDto = { name: '카테고리' };
-      mockRepository.create.mockReturnValue({ ...mockCategory });
-      mockRepository.save.mockResolvedValue(mockCategory);
+      mockCategoriesRepository.create.mockReturnValue({ ...mockCategory });
+      mockCategoriesRepository.save.mockResolvedValue(mockCategory);
 
       await service.create(dto);
 
-      expect(mockRepository.create).toHaveBeenCalledWith({
+      expect(mockCategoriesRepository.create).toHaveBeenCalledWith({
         ...dto,
         isActive: true,
       });
@@ -104,18 +102,16 @@ describe('CategoriesService', () => {
 
   describe('findOne', () => {
     it('ID로 카테고리를 조회한다', async () => {
-      mockRepository.findOne.mockResolvedValue(mockCategory);
+      mockCategoriesRepository.findByIdActive.mockResolvedValue(mockCategory);
 
       const result = await service.findOne('cat-123');
 
-      expect(mockRepository.findOne).toHaveBeenCalledWith({
-        where: { id: 'cat-123', isActive: true },
-      });
+      expect(mockCategoriesRepository.findByIdActive).toHaveBeenCalledWith('cat-123');
       expect(result.id).toBe('cat-123');
     });
 
     it('존재하지 않는 ID면 NotFoundException을 던진다', async () => {
-      mockRepository.findOne.mockResolvedValue(null);
+      mockCategoriesRepository.findByIdActive.mockResolvedValue(null);
 
       await expect(service.findOne('nonexistent')).rejects.toThrow(NotFoundException);
       await expect(service.findOne('nonexistent')).rejects.toThrow('카테고리를 찾을 수 없습니다');
@@ -126,17 +122,17 @@ describe('CategoriesService', () => {
     it('카테고리를 수정한다', async () => {
       const dto: UpdateCategoryDto = { name: '수정된 이름' };
       const updated = { ...mockCategory, ...dto };
-      mockRepository.findOne.mockResolvedValue(mockCategory);
-      mockRepository.save.mockResolvedValue(updated);
+      mockCategoriesRepository.findById.mockResolvedValue(mockCategory);
+      mockCategoriesRepository.save.mockResolvedValue(updated);
 
       const result = await service.update('cat-123', dto);
 
-      expect(mockRepository.save).toHaveBeenCalled();
+      expect(mockCategoriesRepository.save).toHaveBeenCalled();
       expect(result.name).toBe('수정된 이름');
     });
 
     it('존재하지 않는 ID면 NotFoundException을 던진다', async () => {
-      mockRepository.findOne.mockResolvedValue(null);
+      mockCategoriesRepository.findById.mockResolvedValue(null);
 
       await expect(
         service.update('nonexistent', { name: '이름' }),
@@ -146,18 +142,18 @@ describe('CategoriesService', () => {
 
   describe('remove', () => {
     it('카테고리를 비활성화한다 (soft delete)', async () => {
-      mockRepository.findOne.mockResolvedValue(mockCategory);
-      mockRepository.save.mockResolvedValue({ ...mockCategory, isActive: false });
+      mockCategoriesRepository.findById.mockResolvedValue(mockCategory);
+      mockCategoriesRepository.save.mockResolvedValue({ ...mockCategory, isActive: false });
 
       await service.remove('cat-123');
 
-      expect(mockRepository.save).toHaveBeenCalledWith(
+      expect(mockCategoriesRepository.save).toHaveBeenCalledWith(
         expect.objectContaining({ isActive: false }),
       );
     });
 
     it('존재하지 않는 ID면 NotFoundException을 던진다', async () => {
-      mockRepository.findOne.mockResolvedValue(null);
+      mockCategoriesRepository.findById.mockResolvedValue(null);
 
       await expect(service.remove('nonexistent')).rejects.toThrow(NotFoundException);
     });

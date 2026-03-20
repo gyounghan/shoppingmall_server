@@ -4,11 +4,11 @@ export class BrandResponseDto {
   id: string;
   slug: string;
   name: string;
-  description: string;
-  logo: string;
+  description: string | null;
+  logo: string | null;
   logoUrl: string; // 완전한 이미지 URL
-  backgroundColor: string;
-  gradientColor: string;
+  backgroundColor: string | null;
+  gradientColor: string | null;
   hasLogo: boolean;
   hasOverlay: boolean;
   productCount: number;

@@ -1,9 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 import { WishlistService } from './wishlist.service';
-import { WishlistItem } from './entities/wishlist-item.entity';
-import { Product } from '../products/entities/product.entity';
+import { WishlistRepository } from './repositories/wishlist.repository';
 
 describe('WishlistService', () => {
   let service: WishlistService;
@@ -24,24 +22,22 @@ describe('WishlistService', () => {
     updatedAt: new Date(),
   };
 
-  const mockWishlistItemRepository = {
+  const mockWishlistRepository = {
+    findProduct: jest.fn(),
+    findExisting: jest.fn(),
+    findByUser: jest.fn(),
+    findOneById: jest.fn(),
+    findOneByIdWithRelations: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
-    findOne: jest.fn(),
-    find: jest.fn(),
     remove: jest.fn(),
-  };
-
-  const mockProductRepository = {
-    findOne: jest.fn(),
   };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WishlistService,
-        { provide: getRepositoryToken(WishlistItem), useValue: mockWishlistItemRepository },
-        { provide: getRepositoryToken(Product), useValue: mockProductRepository },
+        { provide: WishlistRepository, useValue: mockWishlistRepository },
       ],
     }).compile();
 
@@ -55,24 +51,24 @@ describe('WishlistService', () => {
 
   describe('addItem', () => {
     it('위시리스트에 상품을 추가한다', async () => {
-      mockProductRepository.findOne.mockResolvedValue(mockProduct);
-      mockWishlistItemRepository.findOne
-        .mockResolvedValueOnce(null) // 기존 항목 없음
-        .mockResolvedValueOnce({ ...mockWishlistItem, product: mockProduct }); // 저장 후 조회
-      mockWishlistItemRepository.create.mockReturnValue(mockWishlistItem);
-      mockWishlistItemRepository.save.mockResolvedValue(mockWishlistItem);
+      mockWishlistRepository.findProduct.mockResolvedValue(mockProduct);
+      mockWishlistRepository.findExisting.mockResolvedValue(null);
+      mockWishlistRepository.create.mockReturnValue(mockWishlistItem);
+      mockWishlistRepository.save.mockResolvedValue(mockWishlistItem);
+      mockWishlistRepository.findOneByIdWithRelations.mockResolvedValue({
+        ...mockWishlistItem,
+        product: mockProduct,
+      });
 
       const result = await service.addItem('user-123', 'prod-123');
 
-      expect(mockProductRepository.findOne).toHaveBeenCalledWith({
-        where: { id: 'prod-123', isActive: true },
-      });
+      expect(mockWishlistRepository.findProduct).toHaveBeenCalledWith('prod-123');
       expect(result.productId).toBe('prod-123');
     });
 
     it('이미 찜한 상품이면 ConflictException을 던진다', async () => {
-      mockProductRepository.findOne.mockResolvedValue(mockProduct);
-      mockWishlistItemRepository.findOne.mockResolvedValue(mockWishlistItem);
+      mockWishlistRepository.findProduct.mockResolvedValue(mockProduct);
+      mockWishlistRepository.findExisting.mockResolvedValue(mockWishlistItem);
 
       await expect(service.addItem('user-123', 'prod-123')).rejects.toThrow(
         ConflictException,
@@ -83,7 +79,7 @@ describe('WishlistService', () => {
     });
 
     it('상품이 없으면 NotFoundException을 던진다', async () => {
-      mockProductRepository.findOne.mockResolvedValue(null);
+      mockWishlistRepository.findProduct.mockResolvedValue(null);
 
       await expect(service.addItem('user-123', 'prod-123')).rejects.toThrow(
         NotFoundException,
@@ -93,30 +89,26 @@ describe('WishlistService', () => {
 
   describe('findAll', () => {
     it('사용자 위시리스트를 반환한다', async () => {
-      mockWishlistItemRepository.find.mockResolvedValue([mockWishlistItem]);
+      mockWishlistRepository.findByUser.mockResolvedValue([mockWishlistItem]);
 
       const result = await service.findAll('user-123');
 
-      expect(mockWishlistItemRepository.find).toHaveBeenCalledWith({
-        where: { userId: 'user-123' },
-        relations: ['product'],
-        order: { createdAt: 'DESC' },
-      });
+      expect(mockWishlistRepository.findByUser).toHaveBeenCalledWith('user-123');
       expect(result).toHaveLength(1);
     });
   });
 
   describe('remove', () => {
     it('항목을 삭제한다', async () => {
-      mockWishlistItemRepository.findOne.mockResolvedValue(mockWishlistItem);
+      mockWishlistRepository.findOneById.mockResolvedValue(mockWishlistItem);
 
       await service.remove('user-123', 'wish-123');
 
-      expect(mockWishlistItemRepository.remove).toHaveBeenCalledWith(mockWishlistItem);
+      expect(mockWishlistRepository.remove).toHaveBeenCalledWith(mockWishlistItem);
     });
 
     it('항목이 없으면 NotFoundException을 던진다', async () => {
-      mockWishlistItemRepository.findOne.mockResolvedValue(null);
+      mockWishlistRepository.findOneById.mockResolvedValue(null);
 
       await expect(service.remove('user-123', 'wish-123')).rejects.toThrow(
         NotFoundException,
@@ -129,19 +121,19 @@ describe('WishlistService', () => {
 
   describe('removeByProductId', () => {
     it('상품ID로 항목을 삭제한다', async () => {
-      mockWishlistItemRepository.findOne.mockResolvedValue(mockWishlistItem);
+      mockWishlistRepository.findExisting.mockResolvedValue(mockWishlistItem);
 
       await service.removeByProductId('user-123', 'prod-123');
 
-      expect(mockWishlistItemRepository.remove).toHaveBeenCalledWith(mockWishlistItem);
+      expect(mockWishlistRepository.remove).toHaveBeenCalledWith(mockWishlistItem);
     });
 
     it('항목이 없으면 아무것도 하지 않는다', async () => {
-      mockWishlistItemRepository.findOne.mockResolvedValue(null);
+      mockWishlistRepository.findExisting.mockResolvedValue(null);
 
       await service.removeByProductId('user-123', 'prod-123');
 
-      expect(mockWishlistItemRepository.remove).not.toHaveBeenCalled();
+      expect(mockWishlistRepository.remove).not.toHaveBeenCalled();
     });
   });
 });

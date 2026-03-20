@@ -33,7 +33,7 @@ export class OrderItem {
   product: Product;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
-  optionId: string;
+  optionId: string | null;
 
   @Column({ type: 'int' })
   quantity: number;

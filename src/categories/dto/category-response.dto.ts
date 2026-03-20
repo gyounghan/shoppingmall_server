@@ -3,7 +3,7 @@ import { Category } from '../entities/category.entity';
 export class CategoryResponseDto {
   id: string;
   name: string;
-  description?: string;
+  description: string | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;

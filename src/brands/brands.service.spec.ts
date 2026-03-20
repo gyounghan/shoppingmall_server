@@ -1,11 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import { Repository } from 'typeorm';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 import { BrandsService } from './brands.service';
 import { ProductsService } from '../products/products.service';
 import { Brand } from './entities/brand.entity';
+import { BrandsRepository } from './repositories/brands.repository';
 
 describe('BrandsService', () => {
   let service: BrandsService;
@@ -26,11 +25,12 @@ describe('BrandsService', () => {
     updatedAt: new Date(),
   };
 
-  const mockBrandRepository = {
+  const mockBrandsRepository = {
     create: jest.fn(),
     save: jest.fn(),
-    findOne: jest.fn(),
-    find: jest.fn(),
+    findBySlug: jest.fn(),
+    findByIdOrSlug: jest.fn(),
+    findAll: jest.fn(),
   };
 
   const mockProductsService = {
@@ -45,7 +45,7 @@ describe('BrandsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         BrandsService,
-        { provide: getRepositoryToken(Brand), useValue: mockBrandRepository },
+        { provide: BrandsRepository, useValue: mockBrandsRepository },
         { provide: ProductsService, useValue: mockProductsService },
         { provide: ConfigService, useValue: mockConfigService },
       ],
@@ -53,6 +53,7 @@ describe('BrandsService', () => {
 
     service = module.get<BrandsService>(BrandsService);
     jest.clearAllMocks();
+    mockProductsService.findAll.mockResolvedValue({ total: 5 });
   });
 
   it('should be defined', () => {
@@ -61,24 +62,22 @@ describe('BrandsService', () => {
 
   describe('create', () => {
     it('브랜드를 생성한다', async () => {
-      mockBrandRepository.findOne.mockResolvedValue(null);
-      mockBrandRepository.create.mockReturnValue(mockBrand);
-      mockBrandRepository.save.mockResolvedValue(mockBrand);
+      mockBrandsRepository.findBySlug.mockResolvedValue(null);
+      mockBrandsRepository.create.mockReturnValue(mockBrand);
+      mockBrandsRepository.save.mockResolvedValue(mockBrand);
 
       const result = await service.create({
         slug: 'lowrance',
         name: '로우런스',
       });
 
-      expect(mockBrandRepository.findOne).toHaveBeenCalledWith({
-        where: { slug: 'lowrance' },
-      });
+      expect(mockBrandsRepository.findBySlug).toHaveBeenCalledWith('lowrance');
       expect(result.slug).toBe('lowrance');
       expect(result.name).toBe('로우런스');
     });
 
     it('slug 중복 시 ConflictException을 던진다', async () => {
-      mockBrandRepository.findOne.mockResolvedValue(mockBrand);
+      mockBrandsRepository.findBySlug.mockResolvedValue(mockBrand);
 
       await expect(
         service.create({ slug: 'lowrance', name: '로우런스' }),
@@ -91,7 +90,7 @@ describe('BrandsService', () => {
 
   describe('findAll', () => {
     it('브랜드 목록과 productCount를 반환한다', async () => {
-      mockBrandRepository.find.mockResolvedValue([mockBrand]);
+      mockBrandsRepository.findAll.mockResolvedValue([mockBrand]);
 
       const result = await service.findAll({});
 
@@ -103,18 +102,16 @@ describe('BrandsService', () => {
 
   describe('findOne', () => {
     it('id 또는 slug로 브랜드를 조회한다', async () => {
-      mockBrandRepository.findOne.mockResolvedValue(mockBrand);
+      mockBrandsRepository.findByIdOrSlug.mockResolvedValue(mockBrand);
 
       const result = await service.findOne('lowrance');
 
-      expect(mockBrandRepository.findOne).toHaveBeenCalledWith({
-        where: [{ id: 'lowrance' }, { slug: 'lowrance' }],
-      });
+      expect(mockBrandsRepository.findByIdOrSlug).toHaveBeenCalledWith('lowrance');
       expect(result.slug).toBe('lowrance');
     });
 
     it('존재하지 않으면 NotFoundException을 던진다', async () => {
-      mockBrandRepository.findOne.mockResolvedValue(null);
+      mockBrandsRepository.findByIdOrSlug.mockResolvedValue(null);
 
       await expect(service.findOne('nonexistent')).rejects.toThrow(NotFoundException);
       await expect(service.findOne('nonexistent')).rejects.toThrow('브랜드를 찾을 수 없습니다');
@@ -123,8 +120,8 @@ describe('BrandsService', () => {
 
   describe('update', () => {
     it('브랜드를 수정한다', async () => {
-      mockBrandRepository.findOne.mockResolvedValue(mockBrand);
-      mockBrandRepository.save.mockResolvedValue({ ...mockBrand, name: '수정됨' });
+      mockBrandsRepository.findByIdOrSlug.mockResolvedValue(mockBrand);
+      mockBrandsRepository.save.mockResolvedValue({ ...mockBrand, name: '수정됨' });
 
       const result = await service.update('lowrance', { name: '수정됨' });
 
@@ -132,9 +129,8 @@ describe('BrandsService', () => {
     });
 
     it('slug 변경 시 중복이면 ConflictException을 던진다', async () => {
-      mockBrandRepository.findOne
-        .mockResolvedValueOnce(mockBrand)
-        .mockResolvedValueOnce({ id: 'other', slug: 'garmin' });
+      mockBrandsRepository.findByIdOrSlug.mockResolvedValue(mockBrand);
+      mockBrandsRepository.findBySlug.mockResolvedValue({ id: 'other', slug: 'garmin' });
 
       await expect(
         service.update('lowrance', { slug: 'garmin' }),
@@ -144,18 +140,18 @@ describe('BrandsService', () => {
 
   describe('remove', () => {
     it('브랜드를 비활성화한다 (soft delete)', async () => {
-      mockBrandRepository.findOne.mockResolvedValue(mockBrand);
-      mockBrandRepository.save.mockResolvedValue({ ...mockBrand, isActive: false });
+      mockBrandsRepository.findByIdOrSlug.mockResolvedValue(mockBrand);
+      mockBrandsRepository.save.mockResolvedValue({ ...mockBrand, isActive: false });
 
       await service.remove('lowrance');
 
-      expect(mockBrandRepository.save).toHaveBeenCalledWith(
+      expect(mockBrandsRepository.save).toHaveBeenCalledWith(
         expect.objectContaining({ isActive: false }),
       );
     });
 
     it('존재하지 않으면 NotFoundException을 던진다', async () => {
-      mockBrandRepository.findOne.mockResolvedValue(null);
+      mockBrandsRepository.findByIdOrSlug.mockResolvedValue(null);
 
       await expect(service.remove('nonexistent')).rejects.toThrow(NotFoundException);
     });

@@ -30,7 +30,7 @@ export class User {
   name: string;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
-  phone: string;
+  phone: string | null;
 
   @Column({ type: 'enum', enum: UserRole, default: UserRole.CUSTOMER })
   role: UserRole;
@@ -42,7 +42,7 @@ export class User {
   isActive: boolean;
 
   @Column({ type: 'datetime', nullable: true })
-  lastLoginAt: Date;
+  lastLoginAt: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

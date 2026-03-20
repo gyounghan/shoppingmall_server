@@ -1,5 +1,8 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import * as Joi from 'joi';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -32,12 +35,36 @@ import { SimulatorModule } from './simulator/simulator.module';
 import { ConsultingModule } from './consulting/consulting.module';
 import { UsabilityServiceModule } from './usability-service/usability-service.module';
 import { OrdersModule } from './orders/orders.module';
+import { PaymentsModule } from './payments/payments.module';
+import { HealthModule } from './health/health.module';
+import { HttpLoggingMiddleware } from './common/middleware/http-logging.middleware';
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([
+      {
+        name: 'global',
+        ttl: 60000,
+        limit: 100,
+      },
+    ]),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+      validationSchema: Joi.object({
+        DB_TYPE: Joi.string().default('mysql'),
+        DB_HOST: Joi.string().required(),
+        DB_PORT: Joi.number().default(3306),
+        DB_USERNAME: Joi.string().required(),
+        DB_PASSWORD: Joi.string().required(),
+        DB_DATABASE: Joi.string().required(),
+        PORT: Joi.number().default(3500),
+        NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
+        CORS_ORIGIN: Joi.string().default('http://localhost:5173'),
+        JWT_SECRET: Joi.string().min(16).required(),
+        JWT_ACCESS_EXPIRES: Joi.string().default('15m'),
+        JWT_REFRESH_EXPIRES: Joi.string().default('7d'),
+      }),
     }),
     TypeOrmModule.forRootAsync({
       useFactory: (configService: ConfigService) => ({
@@ -67,7 +94,7 @@ import { OrdersModule } from './orders/orders.module';
           OrderItem,
           Payment,
         ],
-        synchronize: true, // 개발 환경에서만 사용, 프로덕션에서는 false
+        synchronize: configService.get<string>(envVariableKeys.nodeEnv) !== 'production',
         logging: true,
         extra: {
           connectionLimit: 10,
@@ -87,9 +114,21 @@ import { OrdersModule } from './orders/orders.module';
     ConsultingModule,
     UsabilityServiceModule,
     OrdersModule,
+    PaymentsModule,
+    HealthModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
-export class AppModule { }
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(HttpLoggingMiddleware).forRoutes('*');
+  }
+}
 

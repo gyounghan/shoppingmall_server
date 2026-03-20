@@ -3,88 +3,58 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { WishlistItem } from './entities/wishlist-item.entity';
-import { Product } from '../products/entities/product.entity';
 import { WishlistItemResponseDto } from './dto/wishlist-item-response.dto';
+import { WishlistRepository } from './repositories/wishlist.repository';
 
 @Injectable()
 export class WishlistService {
-  constructor(
-    @InjectRepository(WishlistItem)
-    private readonly wishlistItemRepository: Repository<WishlistItem>,
-    @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>,
-  ) {}
+  constructor(private readonly wishlistRepository: WishlistRepository) {}
 
-  async addItem(
-    userId: string,
-    productId: string,
-  ): Promise<WishlistItemResponseDto> {
-    // 제품 확인
-    const product = await this.productRepository.findOne({
-      where: { id: productId, isActive: true },
-    });
+  async addItem(userId: string, productId: string): Promise<WishlistItemResponseDto> {
+    const product = await this.wishlistRepository.findProduct(productId);
 
     if (!product) {
       throw new NotFoundException('제품을 찾을 수 없습니다.');
     }
 
-    // 이미 찜한 제품인지 확인
-    const existingItem = await this.wishlistItemRepository.findOne({
-      where: { userId, productId },
-    });
+    const existingItem = await this.wishlistRepository.findExisting(userId, productId);
 
     if (existingItem) {
       throw new ConflictException('이미 찜한 제품입니다.');
     }
 
-    // 찜 목록에 추가
-    const wishlistItem = this.wishlistItemRepository.create({
-      userId,
-      productId,
-    });
+    const wishlistItem = this.wishlistRepository.create({ userId, productId });
+    const savedItem = await this.wishlistRepository.save(wishlistItem);
 
-    const savedItem = await this.wishlistItemRepository.save(wishlistItem);
-    const itemWithRelations = await this.wishlistItemRepository.findOne({
-      where: { id: savedItem.id },
-      relations: ['product'],
-    });
+    const itemWithRelations = await this.wishlistRepository.findOneByIdWithRelations(savedItem.id);
+
+    if (!itemWithRelations) {
+      throw new NotFoundException('찜 목록 아이템을 찾을 수 없습니다.');
+    }
 
     return new WishlistItemResponseDto(itemWithRelations);
   }
 
   async findAll(userId: string): Promise<WishlistItemResponseDto[]> {
-    const wishlistItems = await this.wishlistItemRepository.find({
-      where: { userId },
-      relations: ['product'],
-      order: { createdAt: 'DESC' },
-    });
-
+    const wishlistItems = await this.wishlistRepository.findByUser(userId);
     return wishlistItems.map((item) => new WishlistItemResponseDto(item));
   }
 
   async remove(userId: string, itemId: string): Promise<void> {
-    const wishlistItem = await this.wishlistItemRepository.findOne({
-      where: { id: itemId, userId },
-    });
+    const wishlistItem = await this.wishlistRepository.findOneById(itemId, userId);
 
     if (!wishlistItem) {
       throw new NotFoundException('찜 목록 아이템을 찾을 수 없습니다.');
     }
 
-    await this.wishlistItemRepository.remove(wishlistItem);
+    await this.wishlistRepository.remove(wishlistItem);
   }
 
   async removeByProductId(userId: string, productId: string): Promise<void> {
-    const wishlistItem = await this.wishlistItemRepository.findOne({
-      where: { userId, productId },
-    });
+    const wishlistItem = await this.wishlistRepository.findExisting(userId, productId);
 
     if (wishlistItem) {
-      await this.wishlistItemRepository.remove(wishlistItem);
+      await this.wishlistRepository.remove(wishlistItem);
     }
   }
 }
-

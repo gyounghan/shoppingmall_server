@@ -34,7 +34,7 @@ export class CartItem {
   product: Product;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
-  optionId: string; // 선택된 옵션 ID
+  optionId: string | null; // 선택된 옵션 ID
 
   @ManyToOne(() => ProductOption, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'optionId' })

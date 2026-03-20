@@ -8,6 +8,7 @@ import { ProductOption } from './entities/product-option.entity';
 import { ProductCompatibility } from './entities/product-compatibility.entity';
 import { ProductRecommendation } from './entities/product-recommendation.entity';
 import { Category } from '../categories/entities/category.entity';
+import { ProductsRepository } from './repositories/products.repository';
 
 @Module({
   imports: [
@@ -21,8 +22,7 @@ import { Category } from '../categories/entities/category.entity';
     ]),
   ],
   controllers: [ProductsController],
-  providers: [ProductsService],
+  providers: [ProductsService, ProductsRepository],
   exports: [ProductsService],
 })
 export class ProductsModule {}
-

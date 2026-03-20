@@ -5,7 +5,7 @@ export class SimulatorSetResponseDto {
   id: string;
   userId?: string;
   name: string;
-  description?: string;
+  description: string | null;
   isActive: boolean;
   items: {
     id: string;

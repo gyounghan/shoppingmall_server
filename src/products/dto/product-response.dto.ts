@@ -7,11 +7,11 @@ import { ProductRecommendation } from '../entities/product-recommendation.entity
 export class ProductResponseDto {
   id: string;
   name: string;
-  description: string;
-  htmlDescription?: string;
+  description: string | null;
+  htmlDescription: string | null;
   price: number;
-  image: string;
-  tag: ProductTag;
+  image: string | null;
+  tag: ProductTag | null;
   brandId: string;
   categoryId: string;
   stock: number;

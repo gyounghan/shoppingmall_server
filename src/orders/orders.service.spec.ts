@@ -1,11 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { OrdersService } from './orders.service';
-import { Order } from './entities/order.entity';
-import { OrderItem } from './entities/order-item.entity';
-import { Payment } from '../payments/entities/payment.entity';
-import { Product } from '../products/entities/product.entity';
+import { OrdersRepository } from './repositories/orders.repository';
 import { CreateOrderDto, CreateGuestOrderDto } from './dto/create-order.dto';
 
 describe('OrdersService', () => {
@@ -20,9 +16,13 @@ describe('OrdersService', () => {
   const mockOrder = {
     id: 'order-123',
     userId: 'user-123',
+    guestName: null,
+    guestEmail: null,
+    guestPhone: null,
     totalAmount: 20000,
     status: 'PENDING',
     note: null,
+    user: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -31,6 +31,7 @@ describe('OrdersService', () => {
     id: 'item-123',
     orderId: 'order-123',
     productId: 'prod-123',
+    optionId: null,
     quantity: 2,
     unitPrice: 10000,
   };
@@ -43,37 +44,25 @@ describe('OrdersService', () => {
     status: 'PENDING',
   };
 
-  const mockOrderRepository = {
-    create: jest.fn(),
-    save: jest.fn(),
-    find: jest.fn(),
-    findOne: jest.fn(),
-  };
-
-  const mockOrderItemRepository = {
-    create: jest.fn(),
-    save: jest.fn(),
-    find: jest.fn(),
-  };
-
-  const mockPaymentRepository = {
-    create: jest.fn(),
-    save: jest.fn(),
-    findOne: jest.fn(),
-  };
-
-  const mockProductRepository = {
-    find: jest.fn(),
+  const mockOrdersRepository = {
+    findProductsByIds: jest.fn(),
+    createOrder: jest.fn(),
+    saveOrder: jest.fn(),
+    createOrderItem: jest.fn(),
+    saveOrderItems: jest.fn(),
+    createPayment: jest.fn(),
+    savePayment: jest.fn(),
+    findGuestOrder: jest.fn(),
+    findOrdersByUser: jest.fn(),
+    findItemsByOrderId: jest.fn(),
+    findPaymentByOrderId: jest.fn(),
   };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
-        { provide: getRepositoryToken(Order), useValue: mockOrderRepository },
-        { provide: getRepositoryToken(OrderItem), useValue: mockOrderItemRepository },
-        { provide: getRepositoryToken(Payment), useValue: mockPaymentRepository },
-        { provide: getRepositoryToken(Product), useValue: mockProductRepository },
+        { provide: OrdersRepository, useValue: mockOrdersRepository },
       ],
     }).compile();
 
@@ -91,22 +80,17 @@ describe('OrdersService', () => {
         items: [{ productId: 'prod-123', quantity: 2 }],
         paymentMethod: 'CARD',
       };
-      mockProductRepository.find.mockResolvedValue([mockProduct]);
-      mockOrderRepository.create.mockReturnValue(mockOrder);
-      mockOrderRepository.save.mockResolvedValue(mockOrder);
-      mockOrderItemRepository.create.mockImplementation((obj) => obj);
-      mockOrderItemRepository.save.mockResolvedValue([mockOrderItem]);
-      mockPaymentRepository.create.mockReturnValue(mockPayment);
-      mockPaymentRepository.save.mockResolvedValue(mockPayment);
+      mockOrdersRepository.findProductsByIds.mockResolvedValue([mockProduct]);
+      mockOrdersRepository.createOrder.mockReturnValue(mockOrder);
+      mockOrdersRepository.saveOrder.mockResolvedValue(mockOrder);
+      mockOrdersRepository.createOrderItem.mockImplementation((obj) => obj);
+      mockOrdersRepository.saveOrderItems.mockResolvedValue([mockOrderItem]);
+      mockOrdersRepository.createPayment.mockReturnValue(mockPayment);
+      mockOrdersRepository.savePayment.mockResolvedValue(mockPayment);
 
       const result = await service.create('user-123', dto);
 
-      expect(mockProductRepository.find).toHaveBeenCalledWith({
-        where: expect.objectContaining({
-          id: expect.anything(),
-          isActive: true,
-        }),
-      });
+      expect(mockOrdersRepository.findProductsByIds).toHaveBeenCalledWith(['prod-123']);
       expect(result.totalAmount).toBe(20000);
       expect(result.payment.paymentMethod).toBe('CARD');
       expect(result.payment.amount).toBe(20000);
@@ -118,7 +102,7 @@ describe('OrdersService', () => {
         items: [{ productId: 'nonexistent', quantity: 1 }],
         paymentMethod: 'CARD',
       };
-      mockProductRepository.find.mockResolvedValue([]);
+      mockOrdersRepository.findProductsByIds.mockResolvedValue([]);
 
       await expect(service.create('user-123', dto)).rejects.toThrow(NotFoundException);
       await expect(service.create('user-123', dto)).rejects.toThrow(
@@ -142,17 +126,17 @@ describe('OrdersService', () => {
         guestEmail: 'guest@test.com',
         guestPhone: '010-1234-5678',
       };
-      mockProductRepository.find.mockResolvedValue([mockProduct]);
-      mockOrderRepository.create.mockReturnValue(guestOrder);
-      mockOrderRepository.save.mockResolvedValue(guestOrder);
-      mockOrderItemRepository.create.mockImplementation((obj) => obj);
-      mockOrderItemRepository.save.mockResolvedValue([mockOrderItem]);
-      mockPaymentRepository.create.mockReturnValue(mockPayment);
-      mockPaymentRepository.save.mockResolvedValue(mockPayment);
+      mockOrdersRepository.findProductsByIds.mockResolvedValue([mockProduct]);
+      mockOrdersRepository.createOrder.mockReturnValue(guestOrder);
+      mockOrdersRepository.saveOrder.mockResolvedValue(guestOrder);
+      mockOrdersRepository.createOrderItem.mockImplementation((obj) => obj);
+      mockOrdersRepository.saveOrderItems.mockResolvedValue([mockOrderItem]);
+      mockOrdersRepository.createPayment.mockReturnValue(mockPayment);
+      mockOrdersRepository.savePayment.mockResolvedValue(mockPayment);
 
       const result = await service.create(null, dto);
 
-      expect(mockOrderRepository.create).toHaveBeenCalledWith(
+      expect(mockOrdersRepository.createOrder).toHaveBeenCalledWith(
         expect.objectContaining({
           guestName: '비회원',
           guestEmail: 'guest@test.com',
@@ -165,14 +149,10 @@ describe('OrdersService', () => {
 
   describe('findByGuestOrderId', () => {
     it('이메일이 일치하는 비회원 주문을 조회한다', async () => {
-      const guestOrder = {
-        ...mockOrder,
-        userId: null,
-        guestEmail: 'guest@test.com',
-      };
-      mockOrderRepository.findOne.mockResolvedValue(guestOrder);
-      mockOrderItemRepository.find.mockResolvedValue([mockOrderItem]);
-      mockPaymentRepository.findOne.mockResolvedValue(mockPayment);
+      const guestOrder = { ...mockOrder, userId: null, guestEmail: 'guest@test.com' };
+      mockOrdersRepository.findGuestOrder.mockResolvedValue(guestOrder);
+      mockOrdersRepository.findItemsByOrderId.mockResolvedValue([mockOrderItem]);
+      mockOrdersRepository.findPaymentByOrderId.mockResolvedValue(mockPayment);
 
       const result = await service.findByGuestOrderId('order-123', 'guest@test.com');
 
@@ -181,7 +161,7 @@ describe('OrdersService', () => {
     });
 
     it('이메일이 일치하지 않으면 NotFoundException을 던진다', async () => {
-      mockOrderRepository.findOne.mockResolvedValue(null);
+      mockOrdersRepository.findGuestOrder.mockResolvedValue(null);
 
       await expect(
         service.findByGuestOrderId('order-123', 'wrong@test.com'),
@@ -191,16 +171,13 @@ describe('OrdersService', () => {
 
   describe('findMine', () => {
     it('사용자의 주문 목록을 반환한다', async () => {
-      mockOrderRepository.find.mockResolvedValue([mockOrder]);
-      mockOrderItemRepository.find.mockResolvedValue([mockOrderItem]);
-      mockPaymentRepository.findOne.mockResolvedValue(mockPayment);
+      mockOrdersRepository.findOrdersByUser.mockResolvedValue([mockOrder]);
+      mockOrdersRepository.findItemsByOrderId.mockResolvedValue([mockOrderItem]);
+      mockOrdersRepository.findPaymentByOrderId.mockResolvedValue(mockPayment);
 
       const result = await service.findMine('user-123');
 
-      expect(mockOrderRepository.find).toHaveBeenCalledWith({
-        where: { userId: 'user-123' },
-        order: { createdAt: 'DESC' },
-      });
+      expect(mockOrdersRepository.findOrdersByUser).toHaveBeenCalledWith('user-123');
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('order-123');
     });

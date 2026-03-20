@@ -1,12 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException, ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { User } from './entities/user.entity';
-import { RefreshToken } from './entities/refresh-token.entity';
+import { UsersRepository } from './repositories/users.repository';
+import { RefreshTokensRepository } from './repositories/refresh-tokens.repository';
 
 jest.mock('bcrypt');
 
@@ -27,17 +27,20 @@ describe('AuthService', () => {
     updatedAt: new Date(),
   };
 
-  const mockUserRepository = {
+  const mockUsersRepository = {
     create: jest.fn(),
     save: jest.fn(),
-    findOne: jest.fn(),
+    findByEmail: jest.fn(),
+    findById: jest.fn(),
+    findActiveById: jest.fn(),
   };
 
-  const mockRefreshTokenRepository = {
+  const mockRefreshTokensRepository = {
     create: jest.fn(),
     save: jest.fn(),
-    findOne: jest.fn(),
-    delete: jest.fn(),
+    findByJti: jest.fn(),
+    deleteByUserId: jest.fn(),
+    deleteByJtiAndUserId: jest.fn(),
     remove: jest.fn(),
   };
 
@@ -54,8 +57,8 @@ describe('AuthService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        { provide: getRepositoryToken(User), useValue: mockUserRepository },
-        { provide: getRepositoryToken(RefreshToken), useValue: mockRefreshTokenRepository },
+        { provide: UsersRepository, useValue: mockUsersRepository },
+        { provide: RefreshTokensRepository, useValue: mockRefreshTokensRepository },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
       ],
@@ -65,8 +68,8 @@ describe('AuthService', () => {
     jest.clearAllMocks();
     (bcrypt.hash as jest.Mock).mockResolvedValue('hashed');
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-    mockRefreshTokenRepository.create.mockImplementation((obj) => obj);
-    mockRefreshTokenRepository.save.mockResolvedValue({});
+    mockRefreshTokensRepository.create.mockImplementation((obj) => obj);
+    mockRefreshTokensRepository.save.mockResolvedValue({});
   });
 
   it('should be defined', () => {
@@ -75,9 +78,9 @@ describe('AuthService', () => {
 
   describe('register', () => {
     it('회원가입 후 JWT 토큰을 반환한다', async () => {
-      mockUserRepository.findOne.mockResolvedValue(null);
-      mockUserRepository.create.mockReturnValue(mockUser);
-      mockUserRepository.save.mockResolvedValue(mockUser);
+      mockUsersRepository.findByEmail.mockResolvedValue(null);
+      mockUsersRepository.create.mockReturnValue(mockUser);
+      mockUsersRepository.save.mockResolvedValue(mockUser);
 
       const result = await service.register({
         email: 'test@example.com',
@@ -93,7 +96,7 @@ describe('AuthService', () => {
     });
 
     it('이메일 중복 시 ConflictException을 던진다', async () => {
-      mockUserRepository.findOne.mockResolvedValue(mockUser);
+      mockUsersRepository.findByEmail.mockResolvedValue(mockUser);
 
       await expect(
         service.register({
@@ -114,8 +117,8 @@ describe('AuthService', () => {
 
   describe('login', () => {
     it('로그인 후 JWT 토큰을 반환한다', async () => {
-      mockUserRepository.findOne.mockResolvedValue(mockUser);
-      mockUserRepository.save.mockResolvedValue(mockUser);
+      mockUsersRepository.findByEmail.mockResolvedValue(mockUser);
+      mockUsersRepository.save.mockResolvedValue(mockUser);
 
       const result = await service.login({
         email: 'test@example.com',
@@ -128,7 +131,7 @@ describe('AuthService', () => {
     });
 
     it('사용자가 없으면 UnauthorizedException을 던진다', async () => {
-      mockUserRepository.findOne.mockResolvedValue(null);
+      mockUsersRepository.findByEmail.mockResolvedValue(null);
 
       await expect(
         service.login({ email: 'wrong@example.com', password: 'password123' }),
@@ -139,7 +142,7 @@ describe('AuthService', () => {
     });
 
     it('비활성 계정이면 UnauthorizedException을 던진다', async () => {
-      mockUserRepository.findOne.mockResolvedValue({ ...mockUser, isActive: false });
+      mockUsersRepository.findByEmail.mockResolvedValue({ ...mockUser, isActive: false });
 
       await expect(
         service.login({ email: 'test@example.com', password: 'password123' }),
@@ -150,7 +153,7 @@ describe('AuthService', () => {
     });
 
     it('비밀번호 불일치 시 UnauthorizedException을 던진다', async () => {
-      mockUserRepository.findOne.mockResolvedValue(mockUser);
+      mockUsersRepository.findByEmail.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
       await expect(
@@ -161,7 +164,7 @@ describe('AuthService', () => {
 
   describe('validateUser', () => {
     it('유효한 userId면 User를 반환한다', async () => {
-      mockUserRepository.findOne.mockResolvedValue(mockUser);
+      mockUsersRepository.findActiveById.mockResolvedValue(mockUser);
 
       const result = await service.validateUser('user-123');
 
@@ -169,7 +172,7 @@ describe('AuthService', () => {
     });
 
     it('없거나 비활성이면 null을 반환한다', async () => {
-      mockUserRepository.findOne.mockResolvedValue(null);
+      mockUsersRepository.findActiveById.mockResolvedValue(null);
 
       const result = await service.validateUser('nonexistent');
 
@@ -179,8 +182,8 @@ describe('AuthService', () => {
 
   describe('updateProfile', () => {
     it('프로필을 수정한다', async () => {
-      mockUserRepository.findOne.mockResolvedValue(mockUser);
-      mockUserRepository.save.mockResolvedValue({
+      mockUsersRepository.findById.mockResolvedValue(mockUser);
+      mockUsersRepository.save.mockResolvedValue({
         ...mockUser,
         name: '새이름',
         phone: '010-1234-5678',
@@ -196,7 +199,7 @@ describe('AuthService', () => {
     });
 
     it('사용자가 없으면 UnauthorizedException을 던진다', async () => {
-      mockUserRepository.findOne.mockResolvedValue(null);
+      mockUsersRepository.findById.mockResolvedValue(null);
 
       await expect(
         service.updateProfile('nonexistent', { name: '이름' }),

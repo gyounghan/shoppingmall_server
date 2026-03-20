@@ -5,7 +5,7 @@ export class CartItemResponseDto {
   id: string;
   productId: string;
   product: ProductResponseDto;
-  optionId?: string;
+  optionId: string | null;
   option?: {
     id: string;
     name: string;

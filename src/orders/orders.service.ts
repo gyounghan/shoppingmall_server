@@ -1,31 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Repository } from 'typeorm';
-import { Order } from './entities/order.entity';
-import { OrderItem } from './entities/order-item.entity';
-import { Payment } from '../payments/entities/payment.entity';
-import { Product } from '../products/entities/product.entity';
 import { CreateOrderDto, CreateGuestOrderDto } from './dto/create-order.dto';
 import { OrderResponseDto } from './dto/order-response.dto';
+import { OrdersRepository } from './repositories/orders.repository';
 
 @Injectable()
 export class OrdersService {
-  constructor(
-    @InjectRepository(Order)
-    private readonly orderRepository: Repository<Order>,
-    @InjectRepository(OrderItem)
-    private readonly orderItemRepository: Repository<OrderItem>,
-    @InjectRepository(Payment)
-    private readonly paymentRepository: Repository<Payment>,
-    @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>,
-  ) {}
+  constructor(private readonly ordersRepository: OrdersRepository) {}
 
   async create(userId: string | null, createDto: CreateOrderDto): Promise<OrderResponseDto> {
     const productIds = createDto.items.map((item) => item.productId);
-    const products = await this.productRepository.find({
-      where: { id: In(productIds), isActive: true },
-    });
+    const products = await this.ordersRepository.findProductsByIds(productIds);
     const productMap = new Map(products.map((product) => [product.id, product]));
 
     const orderItemsPayload = createDto.items.map((item) => {
@@ -35,7 +19,7 @@ export class OrdersService {
       }
       return {
         productId: item.productId,
-        optionId: item.optionId,
+        optionId: item.optionId ?? null,
         quantity: item.quantity,
         unitPrice: Number(product.price),
       };
@@ -49,65 +33,62 @@ export class OrdersService {
     const isGuest = userId === null;
     const guestDto = createDto as CreateGuestOrderDto;
 
-    const order = this.orderRepository.create({
-      userId: isGuest ? undefined : userId,
-      guestName: isGuest ? guestDto.guestName : undefined,
-      guestEmail: isGuest ? guestDto.guestEmail : undefined,
-      guestPhone: isGuest ? guestDto.guestPhone : undefined,
+    const order = this.ordersRepository.createOrder({
+      userId: isGuest ? null : userId,
+      guestName: isGuest ? guestDto.guestName : null,
+      guestEmail: isGuest ? guestDto.guestEmail : null,
+      guestPhone: isGuest ? guestDto.guestPhone : null,
       totalAmount,
-      note: createDto.note,
+      note: createDto.note ?? null,
     });
-    const savedOrder = await this.orderRepository.save(order);
+    const savedOrder = await this.ordersRepository.saveOrder(order);
 
     const orderItems = orderItemsPayload.map((item) =>
-      this.orderItemRepository.create({
-        orderId: savedOrder.id,
-        ...item,
-      }),
+      this.ordersRepository.createOrderItem({ orderId: savedOrder.id, ...item }),
     );
-    const savedItems = await this.orderItemRepository.save(orderItems);
+    const savedItems = await this.ordersRepository.saveOrderItems(orderItems);
 
-    const payment = this.paymentRepository.create({
+    const payment = this.ordersRepository.createPayment({
       orderId: savedOrder.id,
       paymentMethod: createDto.paymentMethod,
       amount: totalAmount,
     });
-    const savedPayment = await this.paymentRepository.save(payment);
+    const savedPayment = await this.ordersRepository.savePayment(payment);
 
     return new OrderResponseDto(savedOrder, savedItems, savedPayment);
   }
 
   async findByGuestOrderId(orderId: string, email: string): Promise<OrderResponseDto> {
-    const order = await this.orderRepository.findOne({
-      where: { id: orderId, userId: IsNull(), guestEmail: email },
-    });
+    const order = await this.ordersRepository.findGuestOrder(orderId, email);
     if (!order) {
       throw new NotFoundException('주문을 찾을 수 없거나 이메일이 일치하지 않습니다.');
     }
+
     const [items, payment] = await Promise.all([
-      this.orderItemRepository.find({ where: { orderId } }),
-      this.paymentRepository.findOne({ where: { orderId } }),
+      this.ordersRepository.findItemsByOrderId(orderId),
+      this.ordersRepository.findPaymentByOrderId(orderId),
     ]);
+
     if (!payment) {
       throw new NotFoundException(`결제 정보를 찾을 수 없습니다.`);
     }
+
     return new OrderResponseDto(order, items, payment);
   }
 
   async findMine(userId: string): Promise<OrderResponseDto[]> {
-    const orders = await this.orderRepository.find({
-      where: { userId },
-      order: { createdAt: 'DESC' },
-    });
+    const orders = await this.ordersRepository.findOrdersByUser(userId);
 
     return Promise.all(
       orders.map(async (order) => {
         const [items, payment] = await Promise.all([
-          this.orderItemRepository.find({ where: { orderId: order.id } }),
-          this.paymentRepository.findOne({ where: { orderId: order.id } }),
+          this.ordersRepository.findItemsByOrderId(order.id),
+          this.ordersRepository.findPaymentByOrderId(order.id),
         ]);
         if (!payment) {
-          throw new NotFoundException(`결제 정보를 찾을 수 없습니다. (orderId: ${order.id})`);
+          throw new NotFoundException(
+            `결제 정보를 찾을 수 없습니다. (orderId: ${order.id})`,
+          );
         }
         return new OrderResponseDto(order, items, payment);
       }),

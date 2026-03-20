@@ -9,6 +9,8 @@ import { User } from './entities/user.entity';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { envVariableKeys } from '../common/env-variable-keys';
+import { UsersRepository } from './repositories/users.repository';
+import { RefreshTokensRepository } from './repositories/refresh-tokens.repository';
 
 @Module({
   imports: [
@@ -16,20 +18,23 @@ import { envVariableKeys } from '../common/env-variable-keys';
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        secret:
-          configService.get<string>(envVariableKeys.jwtSecret) ||
-          'your-secret-key-change-in-production',
-        signOptions: {
-          expiresIn: 900,
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const secret = configService.get<string>(envVariableKeys.jwtSecret);
+        if (!secret) {
+          throw new Error('JWT_SECRET 환경변수가 설정되지 않았습니다. .env 파일을 확인하세요.');
+        }
+        return {
+          secret,
+          signOptions: {
+            expiresIn: 900,
+          },
+        };
+      },
       inject: [ConfigService],
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, UsersRepository, RefreshTokensRepository],
   exports: [AuthService],
 })
 export class AuthModule {}
-

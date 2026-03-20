@@ -18,7 +18,7 @@ export class Category {
   name: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description: string | null;
 
   @Column({ type: 'varchar', length: 36, nullable: true })
   parentId: string | null;

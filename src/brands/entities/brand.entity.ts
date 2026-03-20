@@ -18,16 +18,16 @@ export class Brand {
   name: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description: string | null;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  logo: string; // 로고 이미지 URL 또는 텍스트 (서버에서 관리하는 이미지 URL)
+  logo: string | null; // 로고 이미지 URL 또는 텍스트 (서버에서 관리하는 이미지 URL)
 
   @Column({ type: 'varchar', length: 100, nullable: true })
-  backgroundColor: string; // 'bg-white', 'bg-black', 'oklch(...)' 등
+  backgroundColor: string | null; // 'bg-white', 'bg-black', 'oklch(...)' 등
 
   @Column({ type: 'varchar', length: 100, nullable: true })
-  gradientColor: string; // 'from-red-600 to-red-800' 등
+  gradientColor: string | null; // 'from-red-600 to-red-800' 등
 
   @Column({ type: 'boolean', default: false })
   hasLogo: boolean; // 로고 이미지 파일이 있는지 여부

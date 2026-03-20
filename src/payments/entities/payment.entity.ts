@@ -9,11 +9,13 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Order } from '../../orders/entities/order.entity';
+import { PaymentMethod } from '../enums/payment-method.enum';
 
 export enum PaymentStatus {
   PENDING = 'PENDING',
   COMPLETED = 'COMPLETED',
   FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED',
 }
 
 @Entity('payments')
@@ -29,7 +31,7 @@ export class Payment {
   @JoinColumn({ name: 'orderId' })
   order: Order;
 
-  @Column({ type: 'varchar', length: 50 })
+  @Column({ type: 'enum', enum: PaymentMethod })
   paymentMethod: string;
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
@@ -43,7 +45,7 @@ export class Payment {
   status: PaymentStatus;
 
   @Column({ type: 'json', nullable: true })
-  meta: Record<string, unknown>;
+  meta: Record<string, unknown> | null;
 
   @CreateDateColumn()
   createdAt: Date;
